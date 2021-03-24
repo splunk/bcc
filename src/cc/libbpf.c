@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 PLUMgrid, Inc.
+ * Modifications copyright (c) 2021 Splunk, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -978,7 +979,13 @@ static int create_probe_event(char *buf, const char *ev_name,
     return -1;
   }
 
-  res = snprintf(ev_alias, sizeof(ev_alias), "%s_bcc_%d", ev_name, getpid());
+  // Modified by Splunk, Inc.
+  const char *flowmill_suffix = getenv("FLOWMILL_AGENT_PROBE_SUFFIX");
+  if (flowmill_suffix) {
+    res = snprintf(ev_alias, sizeof(ev_alias), "%s_flowmill_%s", ev_name, flowmill_suffix);
+  } else {
+    res = snprintf(ev_alias, sizeof(ev_alias), "%s_flowmill", ev_name);
+  }
   if (res < 0 || res >= sizeof(ev_alias)) {
     fprintf(stderr, "Event name (%s) is too long for buffer\n", ev_name);
     close(kfd);
@@ -1007,10 +1014,13 @@ static int create_probe_event(char *buf, const char *ev_name,
   }
 
   if (write(kfd, buf, strlen(buf)) < 0) {
-    if (errno == ENOENT)
-      fprintf(stderr, "cannot attach %s, probe entry may not exist\n", event_type);
-    else
+    // Modified by Splunk, Inc.
+    if (errno == ENOENT) {
+      /* fprintf(stderr, "cannot attach %s, probe entry may not exist\n", event_type); */
+    } else {
+      /* leave this error in for now until we actually see it */
       fprintf(stderr, "cannot attach %s, %s\n", event_type, strerror(errno));
+    }
     close(kfd);
     goto error;
   }
@@ -1136,7 +1146,13 @@ static int bpf_detach_probe(const char *ev_name, const char *event_type)
     goto error;
   }
 
-  res = snprintf(buf, sizeof(buf), "%ss/%s_bcc_%d", event_type, ev_name, getpid());
+  // Modified by Splunk, Inc.
+  const char *flowmill_suffix = getenv("FLOWMILL_AGENT_PROBE_SUFFIX");
+  if (flowmill_suffix) {
+    res = snprintf(buf, sizeof(buf), "%ss/%s_flowmill_%s", event_type, ev_name, flowmill_suffix);
+  } else {
+    res = snprintf(buf, sizeof(buf), "%ss/%s_flowmill", event_type, ev_name);
+  }
   if (res < 0 || res >= sizeof(buf)) {
     fprintf(stderr, "snprintf(%s): %d\n", ev_name, res);
     goto error;
@@ -1161,7 +1177,12 @@ static int bpf_detach_probe(const char *ev_name, const char *event_type)
     goto error;
   }
 
-  res = snprintf(buf, sizeof(buf), "-:%ss/%s_bcc_%d", event_type, ev_name, getpid());
+  // Modified by Splunk, Inc.
+  if (flowmill_suffix) {
+    res = snprintf(buf, sizeof(buf), "-:%ss/%s_flowmill_%s", event_type, ev_name, flowmill_suffix);
+  } else {
+    res = snprintf(buf, sizeof(buf), "-:%ss/%s_flowmill", event_type, ev_name);
+  }
   if (res < 0 || res >= sizeof(buf)) {
     fprintf(stderr, "snprintf(%s): %d\n", ev_name, res);
     goto error;
