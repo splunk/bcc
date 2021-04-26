@@ -144,6 +144,32 @@ target_link_libraries(bcc-shared ${bcc_common_libs_for_s})
 target_link_libraries(bcc-static ${bcc_common_libs_for_a} bcc-loader-static)
 set(bcc-lua-static ${bcc-lua-static} ${bcc_common_libs_for_lua})
 
+# Modified by Splunk, Inc.
+### make and install combined static library
+set(COMBINED_LIB ${CMAKE_BINARY_DIR}/libbcc-combined.a)
+add_custom_command(OUTPUT ${COMBINED_LIB}
+        COMMAND ar -rcT ${COMBINED_LIB}
+        	$<TARGET_FILE:bcc-static>
+        	$<TARGET_FILE:b_frontend>
+        	$<TARGET_FILE:clang_frontend>
+        	$<TARGET_FILE:bpf-static>
+        	$<TARGET_FILE:api-static>
+        	$<TARGET_FILE:usdt-static>
+        	$<TARGET_FILE:bcc-loader-static>
+        COMMAND echo 'create ${COMBINED_LIB}\\naddlib ${COMBINED_LIB}\\nsave\\nend' | ar -M
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        DEPENDS
+                bcc-static
+                b_frontend
+                clang_frontend
+                bpf-static
+                api-static
+                bcc-loader-static)
+add_custom_target(combined_lib ALL DEPENDS ${COMBINED_LIB})
+install(FILES ${COMBINED_LIB} DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(FILES common.h DESTINATION include/bcc)
+###
+
 if(LIBBPF_FOUND)
   target_link_libraries(bcc-shared-no-libbpf ${bcc_common_libs_for_n} ${LIBBPF_LIBRARIES})
   install(TARGETS bcc-shared-no-libbpf LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
