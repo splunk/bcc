@@ -980,11 +980,11 @@ static int create_probe_event(char *buf, const char *ev_name,
   }
 
   // Modified by Splunk, Inc.
-  const char *flowmill_suffix = getenv("FLOWMILL_AGENT_PROBE_SUFFIX");
-  if (flowmill_suffix) {
-    res = snprintf(ev_alias, sizeof(ev_alias), "%s_flowmill_%s", ev_name, flowmill_suffix);
+  const char *probe_suffix = getenv("BCC_PROBE_SUFFIX");
+  if (probe_suffix) {
+    res = snprintf(ev_alias, sizeof(ev_alias), "%s_bcc_%s", ev_name, probe_suffix);
   } else {
-    res = snprintf(ev_alias, sizeof(ev_alias), "%s_flowmill", ev_name);
+    res = snprintf(ev_alias, sizeof(ev_alias), "%s_bcc", ev_name);
   }
   if (res < 0 || res >= sizeof(ev_alias)) {
     fprintf(stderr, "Event name (%s) is too long for buffer\n", ev_name);
@@ -1147,11 +1147,11 @@ static int bpf_detach_probe(const char *ev_name, const char *event_type)
   }
 
   // Modified by Splunk, Inc.
-  const char *flowmill_suffix = getenv("FLOWMILL_AGENT_PROBE_SUFFIX");
-  if (flowmill_suffix) {
-    res = snprintf(buf, sizeof(buf), "%ss/%s_flowmill_%s", event_type, ev_name, flowmill_suffix);
+  const char *probe_suffix = getenv("BCC_PROBE_SUFFIX");
+  if (probe_suffix) {
+    res = snprintf(buf, sizeof(buf), "%ss/%s_bcc_%s", event_type, ev_name, probe_suffix);
   } else {
-    res = snprintf(buf, sizeof(buf), "%ss/%s_flowmill", event_type, ev_name);
+    res = snprintf(buf, sizeof(buf), "%ss/%s_bcc", event_type, ev_name);
   }
   if (res < 0 || res >= sizeof(buf)) {
     fprintf(stderr, "snprintf(%s): %d\n", ev_name, res);
@@ -1178,10 +1178,10 @@ static int bpf_detach_probe(const char *ev_name, const char *event_type)
   }
 
   // Modified by Splunk, Inc.
-  if (flowmill_suffix) {
-    res = snprintf(buf, sizeof(buf), "-:%ss/%s_flowmill_%s", event_type, ev_name, flowmill_suffix);
+  if (probe_suffix) {
+    res = snprintf(buf, sizeof(buf), "-:%ss/%s_bcc_%s", event_type, ev_name, probe_suffix);
   } else {
-    res = snprintf(buf, sizeof(buf), "-:%ss/%s_flowmill", event_type, ev_name);
+    res = snprintf(buf, sizeof(buf), "-:%ss/%s_bcc", event_type, ev_name);
   }
   if (res < 0 || res >= sizeof(buf)) {
     fprintf(stderr, "snprintf(%s): %d\n", ev_name, res);
