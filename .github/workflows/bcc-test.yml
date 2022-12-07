@@ -48,6 +48,8 @@ jobs:
                    bcc-docker \
                    /bin/bash -c \
                    'mkdir -p /bcc/build && cd /bcc/build && \
+                    git config --global --add safe.directory /bcc && \
+                    git config --global --add safe.directory /bcc/src/cc/libbpf && \
                     cmake -DCMAKE_BUILD_TYPE=${TYPE} -DENABLE_LLVM_NATIVECODEGEN=${RW_ENGINE_ENABLED} .. && make -j9'"
     - name: Run bcc's cc tests
       env: ${{ matrix.env }}
@@ -132,6 +134,8 @@ jobs:
                    bcc-docker \
                    /bin/bash -c \
                    'mkdir -p /bcc/build && cd /bcc/build && \
+                    git config --global --add safe.directory /bcc && \
+                    git config --global --add safe.directory /bcc/src/cc/libbpf && \
                     cmake -DCMAKE_BUILD_TYPE=${TYPE} -DENABLE_LLVM_SHARED=ON -DRUN_LUA_TESTS=OFF .. && make -j9'"
     - name: Run libbpf-tools build
       env: ${{ matrix.env }}
