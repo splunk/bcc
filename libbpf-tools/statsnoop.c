@@ -7,11 +7,13 @@
 #include <errno.h>
 #include <signal.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
 #include "statsnoop.h"
 #include "statsnoop.skel.h"
+#include "btf_helpers.h"
 #include "trace_helpers.h"
 
 #define PERF_BUFFER_PAGES       16
@@ -122,6 +124,7 @@ static void handle_lost_events(void *ctx, int cpu, __u64 lost_cnt)
 
 int main(int argc, char **argv)
 {
+	LIBBPF_OPTS(bpf_object_open_opts, open_opts);
 	static const struct argp argp = {
 		.options = opts,
 		.parser = parse_arg,
@@ -135,10 +138,15 @@ int main(int argc, char **argv)
 	if (err)
 		return err;
 
-	libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
 	libbpf_set_print(libbpf_print_fn);
 
-	obj = statsnoop_bpf__open();
+	err = ensure_core_btf(&open_opts);
+	if (err) {
+		fprintf(stderr, "failed to fetch necessary BTF for CO-RE: %s\n", strerror(-err));
+		return 1;
+	}
+
+	obj = statsnoop_bpf__open_opts(&open_opts);
 	if (!obj) {
 		warn("failed to open BPF object\n");
 		return 1;
@@ -146,6 +154,27 @@ int main(int argc, char **argv)
 
 	obj->rodata->target_pid = target_pid;
 	obj->rodata->trace_failed_only = trace_failed_only;
+
+	if (!tracepoint_exists("syscalls", "sys_enter_statfs")) {
+		bpf_program__set_autoload(obj->progs.handle_statfs_entry, false);
+		bpf_program__set_autoload(obj->progs.handle_statfs_return, false);
+	}
+	if (!tracepoint_exists("syscalls", "sys_enter_statx")) {
+		bpf_program__set_autoload(obj->progs.handle_statx_entry, false);
+		bpf_program__set_autoload(obj->progs.handle_statx_return, false);
+	}
+	if (!tracepoint_exists("syscalls", "sys_enter_newstat")) {
+		bpf_program__set_autoload(obj->progs.handle_newstat_entry, false);
+		bpf_program__set_autoload(obj->progs.handle_newstat_return, false);
+	}
+	if (!tracepoint_exists("syscalls", "sys_enter_newfstatat")) {
+		bpf_program__set_autoload(obj->progs.handle_newfstatat_entry, false);
+		bpf_program__set_autoload(obj->progs.handle_newfstatat_return, false);
+	}
+	if (!tracepoint_exists("syscalls", "sys_enter_newlstat")) {
+		bpf_program__set_autoload(obj->progs.handle_newlstat_entry, false);
+		bpf_program__set_autoload(obj->progs.handle_newlstat_return, false);
+	}
 
 	err = statsnoop_bpf__load(obj);
 	if (err) {
@@ -191,6 +220,7 @@ int main(int argc, char **argv)
 cleanup:
 	perf_buffer__free(pb);
 	statsnoop_bpf__destroy(obj);
+	cleanup_core_btf(&open_opts);
 
 	return err != 0;
 }

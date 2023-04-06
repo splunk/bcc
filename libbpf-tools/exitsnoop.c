@@ -13,11 +13,14 @@
 #include <signal.h>
 #include <string.h>
 #include <time.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
 #include "exitsnoop.h"
 #include "exitsnoop.skel.h"
+#include "btf_helpers.h"
 #include "trace_helpers.h"
 
 #define PERF_BUFFER_PAGES	16
@@ -32,20 +35,26 @@ static bool trace_failed_only = false;
 static bool trace_by_process = true;
 static bool verbose = false;
 
+static struct env {
+	char *cgroupspath;
+	bool cg;
+} env;
+
 const char *argp_program_version = "exitsnoop 0.1";
 const char *argp_program_bug_address =
 	"https://github.com/iovisor/bcc/tree/master/libbpf-tools";
 const char argp_program_doc[] =
 "Trace process termination.\n"
 "\n"
-"USAGE: exitsnoop [-h] [-t] [-x] [-p PID] [-T]\n"
+"USAGE: exitsnoop [-h] [-t] [-x] [-p PID] [-T] [-c CG]\n"
 "\n"
 "EXAMPLES:\n"
 "    exitsnoop             # trace process exit events\n"
 "    exitsnoop -t          # include timestamps\n"
 "    exitsnoop -x          # trace error exits only\n"
 "    exitsnoop -p 1216     # only trace PID 1216\n"
-"    exitsnoop -T          # trace by thread\n";
+"    exitsnoop -T          # trace by thread\n"
+"    exitsnoop -c CG       # Trace process under cgroupsPath CG\n";
 
 static const struct argp_option opts[] = {
 	{ "timestamp", 't', NULL, 0, "Include timestamp on output" },
@@ -54,6 +63,7 @@ static const struct argp_option opts[] = {
 	{ "threaded", 'T', NULL, 0, "Trace by thread." },
 	{ "verbose", 'v', NULL, 0, "Verbose debug output" },
 	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help" },
+	{ "cgroup", 'c', "/sys/fs/cgroup/unified", 0, "Trace process in cgroup path"},
 	{},
 };
 
@@ -82,6 +92,10 @@ static error_t parse_arg(int key, char *arg, struct argp_state *state)
 		break;
 	case 'v':
 		verbose = true;
+		break;
+	case 'c':
+		env.cgroupspath = arg;
+		env.cg = true;
 		break;
 	case 'h':
 		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
@@ -147,6 +161,7 @@ static void handle_lost_events(void *ctx, int cpu, __u64 lost_cnt)
 
 int main(int argc, char **argv)
 {
+	LIBBPF_OPTS(bpf_object_open_opts, open_opts);
 	static const struct argp argp = {
 		.options = opts,
 		.parser = parse_arg,
@@ -155,15 +170,22 @@ int main(int argc, char **argv)
 	struct perf_buffer *pb = NULL;
 	struct exitsnoop_bpf *obj;
 	int err;
+	int idx, cg_map_fd;
+	int cgfd = -1;
 
 	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
 	if (err)
 		return err;
 
-	libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
 	libbpf_set_print(libbpf_print_fn);
 
-	obj = exitsnoop_bpf__open();
+	err = ensure_core_btf(&open_opts);
+	if (err) {
+		fprintf(stderr, "failed to fetch necessary BTF for CO-RE: %s\n", strerror(-err));
+		return 1;
+	}
+
+	obj = exitsnoop_bpf__open_opts(&open_opts);
 	if (!obj) {
 		warn("failed to open BPF object\n");
 		return 1;
@@ -172,11 +194,27 @@ int main(int argc, char **argv)
 	obj->rodata->target_pid = target_pid;
 	obj->rodata->trace_failed_only = trace_failed_only;
 	obj->rodata->trace_by_process = trace_by_process;
+	obj->rodata->filter_cg = env.cg;
 
 	err = exitsnoop_bpf__load(obj);
 	if (err) {
 		warn("failed to load BPF object: %d\n", err);
 		goto cleanup;
+	}
+
+	/* update cgroup path fd to map */
+	if (env.cg) {
+		idx = 0;
+		cg_map_fd = bpf_map__fd(obj->maps.cgroup_map);
+		cgfd = open(env.cgroupspath, O_RDONLY);
+		if (cgfd < 0) {
+			fprintf(stderr, "Failed opening Cgroup path: %s", env.cgroupspath);
+			goto cleanup;
+		}
+		if (bpf_map_update_elem(cg_map_fd, &idx, &cgfd, BPF_ANY)) {
+			fprintf(stderr, "Failed adding target cgroup to map");
+			goto cleanup;
+		}
 	}
 
 	err = exitsnoop_bpf__attach(obj);
@@ -217,6 +255,9 @@ int main(int argc, char **argv)
 cleanup:
 	perf_buffer__free(pb);
 	exitsnoop_bpf__destroy(obj);
+	cleanup_core_btf(&open_opts);
+	if (cgfd > 0)
+		close(cgfd);
 
 	return err != 0;
 }

@@ -12,11 +12,13 @@
 #include <errno.h>
 #include <signal.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
 #include "gethostlatency.h"
 #include "gethostlatency.skel.h"
+#include "btf_helpers.h"
 #include "trace_helpers.h"
 #include "uprobe_helpers.h"
 
@@ -134,7 +136,8 @@ static int get_libc_path(char *path)
 		if (strchr(buf, '/') != buf)
 			continue;
 		filename = strrchr(buf, '/') + 1;
-		if (sscanf(filename, "libc-%f.so", &version) == 1) {
+		if (sscanf(filename, "libc-%f.so", &version) == 1 ||
+		    sscanf(filename, "libc.so.%f", &version) == 1) {
 			memcpy(path, buf, strlen(buf));
 			fclose(f);
 			return 0;
@@ -216,6 +219,7 @@ static int attach_uprobes(struct gethostlatency_bpf *obj, struct bpf_link *links
 
 int main(int argc, char **argv)
 {
+	LIBBPF_OPTS(bpf_object_open_opts, open_opts);
 	static const struct argp argp = {
 		.options = opts,
 		.parser = parse_arg,
@@ -230,10 +234,15 @@ int main(int argc, char **argv)
 	if (err)
 		return err;
 
-	libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
 	libbpf_set_print(libbpf_print_fn);
 
-	obj = gethostlatency_bpf__open();
+	err = ensure_core_btf(&open_opts);
+	if (err) {
+		fprintf(stderr, "failed to fetch necessary BTF for CO-RE: %s\n", strerror(-err));
+		return 1;
+	}
+
+	obj = gethostlatency_bpf__open_opts(&open_opts);
 	if (!obj) {
 		warn("failed to open BPF object\n");
 		return 1;
@@ -283,6 +292,7 @@ cleanup:
 	for (i = 0; i < 6; i++)
 		bpf_link__destroy(links[i]);
 	gethostlatency_bpf__destroy(obj);
+	cleanup_core_btf(&open_opts);
 
 	return err != 0;
 }

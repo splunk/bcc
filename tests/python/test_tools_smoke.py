@@ -2,7 +2,6 @@
 # Copyright (c) Sasha Goldshtein, 2017
 # Licensed under the Apache License, Version 2.0 (the "License")
 
-import distutils.version
 import subprocess
 import os
 import re
@@ -260,6 +259,7 @@ class SmokeTests(TestCase):
             pass
 
     @skipUnless(kernel_version_ge(4,6), "requires kernel >= 4.6")
+    @mayFail("This fails on github actions environment, and needs to be fixed")
     def test_offcputime(self):
         self.run_with_duration("offcputime.py 1")
 
@@ -277,6 +277,11 @@ class SmokeTests(TestCase):
 
     def test_pidpersec(self):
         self.run_with_int("pidpersec.py")
+
+    @skipUnless(kernel_version_ge(4,17), "requires kernel >= 4.17")
+    @mayFail("This fails on github actions environment, and needs to be fixed")
+    def test_syscount(self):
+        self.run_with_int("ppchcalls.py -i 1")
 
     @skipUnless(kernel_version_ge(4,9), "requires kernel >= 4.9")
     def test_profile(self):
@@ -357,6 +362,9 @@ class SmokeTests(TestCase):
 
     def test_tcptop(self):
         self.run_with_duration("tcptop.py 1 1")
+
+    def test_tcpcong(self):
+        self.run_with_duration("tcpcong.py 1 1")
 
     def test_tplist(self):
         self.run_with_duration("tplist.py -p %d" % os.getpid())

@@ -145,7 +145,6 @@ int main(int argc, char **argv)
 	if (err)
 		return err;
 
-	libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
 	libbpf_set_print(libbpf_print_fn);
 
 	obj = biostacks_bpf__open();
@@ -172,6 +171,18 @@ int main(int argc, char **argv)
 	}
 
 	obj->rodata->targ_ms = env.milliseconds;
+
+	if (fentry_can_attach("blk_account_io_start", NULL)) {
+		bpf_program__set_attach_target(obj->progs.blk_account_io_start, 0,
+					       "blk_account_io_start");
+		bpf_program__set_attach_target(obj->progs.blk_account_io_done, 0,
+					       "blk_account_io_done");
+	} else {
+		bpf_program__set_attach_target(obj->progs.blk_account_io_start, 0,
+					       "__blk_account_io_start");
+		bpf_program__set_attach_target(obj->progs.blk_account_io_done, 0,
+					       "__blk_account_io_done");
+	}
 
 	err = biostacks_bpf__load(obj);
 	if (err) {

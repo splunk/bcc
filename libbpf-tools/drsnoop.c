@@ -157,7 +157,6 @@ int main(int argc, char **argv)
 	if (err)
 		return err;
 
-	libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
 	libbpf_set_print(libbpf_print_fn);
 
 	obj = drsnoop_bpf__open();
@@ -182,6 +181,14 @@ int main(int argc, char **argv)
 		}
 		obj->rodata->vm_zone_stat_kaddr = ksym->addr;
 		page_size = sysconf(_SC_PAGESIZE);
+	}
+
+	if (probe_tp_btf("mm_vmscan_direct_reclaim_begin")) {
+		bpf_program__set_autoload(obj->progs.direct_reclaim_begin, false);
+		bpf_program__set_autoload(obj->progs.direct_reclaim_end, false);
+	} else {
+		bpf_program__set_autoload(obj->progs.direct_reclaim_begin_btf, false);
+		bpf_program__set_autoload(obj->progs.direct_reclaim_end_btf, false);
 	}
 
 	err = drsnoop_bpf__load(obj);

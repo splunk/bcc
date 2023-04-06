@@ -5,6 +5,7 @@
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_tracing.h>
 #include "biosnoop.h"
+#include "core_fixes.bpf.h"
 
 #define MAX_ENTRIES	10240
 
@@ -32,7 +33,6 @@ struct {
 	__uint(max_entries, MAX_ENTRIES);
 	__type(key, struct request *);
 	__type(value, struct piddata);
-	__uint(map_flags, BPF_F_NO_PREALLOC);
 } infobyreq SEC(".maps");
 
 struct stage {
@@ -92,7 +92,7 @@ int trace_rq_start(struct request *rq, bool insert)
 
 	stagep = bpf_map_lookup_elem(&start, &rq);
 	if (!stagep) {
-		struct gendisk *disk = BPF_CORE_READ(rq, rq_disk);
+		struct gendisk *disk = get_disk(rq);
 
 		stage.dev = disk ? MKDEV(BPF_CORE_READ(disk, major),
 				BPF_CORE_READ(disk, first_minor)) : 0;
@@ -120,7 +120,7 @@ int BPF_PROG(block_rq_insert)
 	 * from TP_PROTO(struct request_queue *q, struct request *rq)
 	 * to TP_PROTO(struct request *rq)
 	 */
-	if (LINUX_KERNEL_VERSION > KERNEL_VERSION(5, 10, 0))
+	if (LINUX_KERNEL_VERSION >= KERNEL_VERSION(5, 11, 0))
 		return trace_rq_start((void *)ctx[0], true);
 	else
 		return trace_rq_start((void *)ctx[1], true);
@@ -137,7 +137,7 @@ int BPF_PROG(block_rq_issue)
 	 * from TP_PROTO(struct request_queue *q, struct request *rq)
 	 * to TP_PROTO(struct request *rq)
 	 */
-	if (LINUX_KERNEL_VERSION > KERNEL_VERSION(5, 10, 0))
+	if (LINUX_KERNEL_VERSION >= KERNEL_VERSION(5, 11, 0))
 		return trace_rq_start((void *)ctx[0], false);
 	else
 		return trace_rq_start((void *)ctx[1], false);

@@ -202,6 +202,9 @@ Syntax: TRACEPOINT_PROBE(*category*, *event*)
 
 This is a macro that instruments the tracepoint defined by *category*:*event*.
 
+The tracepoint name is `<category>:<event>`.
+The probe function name is `tracepoint__<category>__<event>`.
+
 Arguments are available in an ```args``` struct, which are the tracepoint arguments. One way to list these is to cat the relevant format file under /sys/kernel/debug/tracing/events/*category*/*event*/format.
 
 The ```args``` struct can be used in place of ``ctx`` in each functions requiring a context as an argument. This includes notably [perf_submit()](#3-perf_submit).
@@ -216,7 +219,11 @@ TRACEPOINT_PROBE(random, urandom_read) {
 }
 ```
 
-This instruments the random:urandom_read tracepoint, and prints the tracepoint argument ```got_bits```.
+This instruments the tracepoint `random:urandom_read tracepoint`, and prints the tracepoint argument ```got_bits```.
+When using Python API, this probe is automatically attached to the right tracepoint target.
+For C++, this tracepoint probe can be attached by specifying the tracepoint target and function name explicitly:
+`BPF::attach_tracepoint("random:urandom_read", "tracepoint__random__urandom_read")`
+Note the name of the probe function defined above is `tracepoint__random__urandom_read`.
 
 Examples in situ:
 [code](https://github.com/iovisor/bcc/blob/a4159da8c4ea8a05a3c6e402451f530d6e5a8b41/examples/tracing/urandomread.py#L19) ([output](https://github.com/iovisor/bcc/commit/e422f5e50ecefb96579b6391a2ada7f6367b83c4#diff-41e5ecfae4a3b38de5f4e0887ed160e5R10)),
@@ -1138,9 +1145,9 @@ Examples in situ:
 
 ### 13. BPF_XSKMAP
 
-Syntax: ```BPF_XSKMAP(name, size)```
+Syntax: ```BPF_XSKMAP(name, size [, "/sys/fs/bpf/xyz"])```
 
-This creates a xsk map named ```name``` with ```size``` entries. Each entry represents one NIC's queue id. This map is only used in XDP to redirect packet to an AF_XDP socket. If the AF_XDP socket is binded to a queue which is different than the current packet's queue id, the packet will be dropped. For kernel v5.3 and latter, `lookup` method is available and can be used to check whether and AF_XDP socket is available for the current packet's queue id. More details at [AF_XDP](https://www.kernel.org/doc/html/latest/networking/af_xdp.html).
+This creates a xsk map named ```name``` with ```size``` entries and pin it to the bpffs as a FILE. Each entry represents one NIC's queue id. This map is only used in XDP to redirect packet to an AF_XDP socket. If the AF_XDP socket is binded to a queue which is different than the current packet's queue id, the packet will be dropped. For kernel v5.3 and latter, `lookup` method is available and can be used to check whether and AF_XDP socket is available for the current packet's queue id. More details at [AF_XDP](https://www.kernel.org/doc/html/latest/networking/af_xdp.html).
 
 For example:
 ```C

@@ -7,6 +7,7 @@
 #include "biostacks.h"
 #include "bits.bpf.h"
 #include "maps.bpf.h"
+#include "core_fixes.bpf.h"
 
 #define MAX_ENTRIES	10240
 
@@ -24,7 +25,6 @@ struct {
 	__uint(max_entries, MAX_ENTRIES);
 	__type(key, struct request *);
 	__type(value, struct internal_rqinfo);
-	__uint(map_flags, BPF_F_NO_PREALLOC);
 } rqinfos SEC(".maps");
 
 struct {
@@ -32,7 +32,6 @@ struct {
 	__uint(max_entries, MAX_ENTRIES);
 	__type(key, struct rqinfo);
 	__type(value, struct hist);
-	__uint(map_flags, BPF_F_NO_PREALLOC);
 } hists SEC(".maps");
 
 static struct hist zero;
@@ -41,7 +40,7 @@ static __always_inline
 int trace_start(void *ctx, struct request *rq, bool merge_bio)
 {
 	struct internal_rqinfo *i_rqinfop = NULL, i_rqinfo = {};
-	struct gendisk *disk = BPF_CORE_READ(rq, rq_disk);
+	struct gendisk *disk = get_disk(rq);
 	u32 dev;
 
 	dev = disk ? MKDEV(BPF_CORE_READ(disk, major),
